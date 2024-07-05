@@ -1,0 +1,21 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: "tokenservice"
+  datasource:
+    url: jdbc:mysql://localhost:3306/tokendb
+    username: root
+    password: root
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+  sql:
+    init:
+      mode: always
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"

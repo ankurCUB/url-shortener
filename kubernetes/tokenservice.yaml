@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tokenservice-deployment
+  labels:
+    app: tokenservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tokenservice
+  template:
+    metadata:
+      labels:
+        app: tokenservice
+    spec:
+      containers:
+      - name: mysql
+        image: mysql
+        ports:
+          - containerPort: 3306
+        env:
+          - name: MYSQL_ROOT_PASSWORD
+            value: root
+          - name: MYSQL_DATABASE
+            value: tokendb
+        volumeMounts:
+          - name: mysql-storage
+            mountPath: /var/lib/mysql
+      - name: tokenservice
+        image: ankurmpkp/tokenservice:s1
+        ports:
+        - containerPort: 8080
+      volumes:
+        - name: mysql-storage
+          emptyDir: { }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tokenservice
+spec:
+  selector:
+    app: tokenservice
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080

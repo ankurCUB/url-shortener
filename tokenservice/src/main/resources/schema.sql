@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS `tokens`(
+    `token_id` int AUTO_INCREMENT PRIMARY KEY,
+    `is_assigned` BOOLEAN DEFAULT FALSE
+);
