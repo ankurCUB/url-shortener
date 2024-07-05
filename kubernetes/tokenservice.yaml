@@ -33,7 +33,8 @@ spec:
         - containerPort: 8080
       volumes:
         - name: mysql-storage
-          emptyDir: { }
+          persistentVolumeClaim:
+            claimName: mysql-pvc
 
 ---
 apiVersion: v1
