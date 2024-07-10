@@ -10,12 +10,10 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 )
 
 type request struct {
 	URL         string        `json:"url"`
-	CustomShort string        `json:"short"`
 	Expiry      time.Duration `json:"expiry"`
 }
 
@@ -45,15 +43,15 @@ func ShortenURL(c *fiber.Ctx) error {
 	if err == redis.Nil {
 		_ = r2.Set(database.Ctx, c.IP(), os.Getenv("API_QUOTA"), 30*60*time.Second).Err() 
 	} else {
-		// val, _ = r2.Get(database.Ctx, c.IP()).Result()
-		valInt, _ := strconv.Atoi(val)
-		if valInt <= 0 {
-			limit, _ := r2.TTL(database.Ctx, c.IP()).Result()
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"error":            "Rate limit exceeded",
-				"rate_limit_reset": limit / time.Nanosecond / time.Minute,
-			})
-		}
+		// valInt, _ := strconv.Atoi(val)
+		// Uncomment for rate
+		// if valInt <= 0 {
+		// 	limit, _ := r2.TTL(database.Ctx, c.IP()).Result()
+		// 	return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+		// 		"error":            "Rate limit exceeded",
+		// 		"rate_limit_reset": limit / time.Nanosecond / time.Minute,
+		// 	})
+		// }
 	}
 
 	if !govalidator.IsURL(body.URL) {
@@ -74,22 +72,75 @@ func ShortenURL(c *fiber.Ctx) error {
 
 	// implement collision checks
 	var id string
-	if body.CustomShort == "" {
-		id = uuid.New().String()[:6]
-	} else {
-		id = body.CustomShort
+
+	r3 := database.CreateClient(2)
+	defer r3.Close()
+	start, err := r3.Get(database.Ctx, "start").Result()
+	if err == redis.Nil {
+		// If start value doesn't exist, fetch token range
+		if err := GetTokenRange(c); err != nil {
+			return err
+		}
+		// Retry
+		start, err = r3.Get(database.Ctx, "start").Result()
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":   "failed to retrieve token range",
+				"details": err.Error(),
+			})
+		}
+	}
+	end, err := r3.Get(database.Ctx, "end").Result()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "failed to retrieve token range",
+			"details": err.Error(),
+		})
+	}
+
+	startInt, _ := strconv.Atoi(start)
+	endInt, _ := strconv.Atoi(end)
+	if startInt > endInt {
+		// Fetch new token range if start exceeds end
+		if err := GetTokenRange(c); err != nil {
+			return err
+		}
+		// Retry
+		start, err = r3.Get(database.Ctx, "start").Result()
+		if err != nil {
+			return err
+		}
+		end, err = r3.Get(database.Ctx, "end").Result()
+		if err != nil {
+			return err
+		}
+		startInt, _ = strconv.Atoi(start)
+		endInt, _ = strconv.Atoi(end)
+	}
+	// Generate UUID based on fetched start value
+	id = generateShortUUID(startInt)
+
+	// Increment start value in Redis after successfully sending the response
+	startInt++
+	if err := r3.Set(database.Ctx, "start", strconv.Itoa(startInt), 0).Err(); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "failed to increment start value",
+			"details": err.Error(),
+		})
 	}
 
 	r := database.CreateClient(0)
 	defer r.Close()
 
-	val, _ = r.Get(database.Ctx, id).Result()
-	// check if the user provided short is already in use
-	if val != "" {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "URL short already in use",
-		})
-	}
+	// not needed, unique urls using token
+	// val, _ = r.Get(database.Ctx, id).Result()
+	// // check if the user provided short is already in use
+	// if val != "" {
+	// 	return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+	// 		"error": "URL short already in use",
+	// 	})
+	// }
+	
 	if body.Expiry == 0 {
 		body.Expiry = 24 // default expiry of 24 hours
 	}
@@ -115,4 +166,24 @@ func ShortenURL(c *fiber.Ctx) error {
 
 	resp.CustomShort = os.Getenv("DOMAIN") + "/" + id
 	return c.Status(fiber.StatusOK).JSON(resp)
+}
+
+func generateShortUUID(id int) string {
+    charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    base := len(charset)
+    res := make([]byte, 6)
+    for i := range res {
+        res[i] = 'a'
+    }
+    id -= 1
+    for i := 5; i >= 0; i-- {
+        power := 1
+        for j := 0; j < i; j++ {
+            power *= base
+        }
+        index := id / power
+        res[5-i] = charset[index]
+        id %= power
+    }
+    return string(res)
 }

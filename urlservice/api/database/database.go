@@ -16,3 +16,7 @@ func CreateClient(dbNo int) *redis.Client {
 	})
 	return rdb
 }
+
+// 0 - short - long, expiry
+// 1 - IP address, decrement rate?
+// 2 - token range start, end

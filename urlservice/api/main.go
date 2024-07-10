@@ -16,7 +16,7 @@ import (
 )
 
 func setupRoutes(app *fiber.App) {
-	// app.Get("/token/:service", routes.GetTokenRange)
+	app.Get("/token", routes.GetTokenRange)
 	app.Get("/:url", routes.ResolveURL)
 	app.Post("/api/v1", routes.ShortenURL)
 }
