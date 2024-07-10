@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tokenservice-deployment
+  namespace: urlshortener
   labels:
     app: tokenservice
 spec:
@@ -35,17 +36,3 @@ spec:
         - name: mysql-storage
           persistentVolumeClaim:
             claimName: mysql-pvc
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: tokenservice
-spec:
-  selector:
-    app: tokenservice
-  type: LoadBalancer
-  ports:
-    - protocol: TCP
-      port: 8080
-      targetPort: 8080
